@@ -10,10 +10,23 @@ export default function shipsPoolConverter(array) {
     }
 
     for (let i = 0; i < countOfCoords; i++) {
+        const width = array[i].length;
         const x = array[i].position.x;
         const y = array[i].position.y;
-        resultArray[x][y] = 1;
-    }
 
+        console.log('x ', x, 'y ', y, 'width ', width);
+        console.log('direction ',
+            array[i].direction === true ? 'down X' : 'left Y');
+
+        for (let j = 0; j < width; j++) {
+            if (array[i].direction === true) {
+                resultArray[y + j][x] = 1;
+            } else {
+                resultArray[y][x + j] = 1;
+            }
+        }
+    }
+    console.log(resultArray);
+    // console.log(resultArray.flat(1));
     return resultArray;
 }

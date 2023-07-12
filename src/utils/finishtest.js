@@ -1,3 +1,4 @@
 export default function isGameFinished(array) {
-    return !array.find(item => item === 1);
+    const arrToTest = array.flat();
+    return !arrToTest.find(item => item === 1);
 }

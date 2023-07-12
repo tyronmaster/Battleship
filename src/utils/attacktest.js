@@ -1,6 +1,9 @@
 export default function attackTest(x, y, array) {
-    if (array[x, y] === 1) array[x, y] = '*';
-    const maxValue = array[0].length;
+    if (!(array[y][x] === 1)) return { status: 'missed', array };
+
+    array[y][x] = '*';
+    const maxValue = 9;
+    console.log(array.flat());
 
     let fromX, fromY, toX, toY;
     if (x === 0) { fromX = 0; toX = x + 1; }
@@ -8,9 +11,11 @@ export default function attackTest(x, y, array) {
     if (y === 0) { fromY = 0; toY = y + 1; }
     if (y === maxValue) { fromY = y - 1; toY = maxValue; }
 
-    for (let i = fromX; i <= toX; i++) {
-        for (let j = fromY; j <= toY; j++) {
-            if (array[i, j] === 1) return { status: 'shot', array };
+    for (let i = fromY; i <= toY; i++) {
+        for (let j = fromX; j <= toX; j++) {
+            console.log('x', j, 'y', i, 'arr', array[j][i]);
+
+            if (array[j][i] === 1) return { status: 'shot', array };
         }
     }
 
