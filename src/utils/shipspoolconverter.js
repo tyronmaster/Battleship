@@ -14,9 +14,9 @@ export default function shipsPoolConverter(array) {
         const x = array[i].position.x;
         const y = array[i].position.y;
 
-        console.log('x ', x, 'y ', y, 'width ', width);
-        console.log('direction ',
-            array[i].direction === true ? 'down X' : 'left Y');
+        // console.log('x ', x, 'y ', y, 'width ', width);
+        // console.log('direction ',
+            // array[i].direction === true ? 'down X' : 'left Y');
 
         for (let j = 0; j < width; j++) {
             if (array[i].direction === true) {
@@ -26,7 +26,7 @@ export default function shipsPoolConverter(array) {
             }
         }
     }
-    console.log(resultArray);
+    // console.log(resultArray);
     // console.log(resultArray.flat(1));
     return resultArray;
 }

@@ -3,7 +3,7 @@ export default function attackTest(x, y, array) {
 
     array[y][x] = '*';
     const maxValue = 9;
-    console.log(array.flat());
+    // console.log(array.flat());
 
     let fromX, fromY, toX, toY;
     if (x === 0) { fromX = 0; toX = x + 1; }
@@ -13,7 +13,7 @@ export default function attackTest(x, y, array) {
 
     for (let i = fromY; i <= toY; i++) {
         for (let j = fromX; j <= toX; j++) {
-            console.log('x', j, 'y', i, 'arr', array[j][i]);
+            // console.log('x', j, 'y', i, 'arr', array[j][i]);
 
             if (array[j][i] === 1) return { status: 'shot', array };
         }

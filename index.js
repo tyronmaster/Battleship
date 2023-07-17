@@ -5,14 +5,22 @@ const HTTP_PORT = 8181;
 console.log(`Start static http server on the ${HTTP_PORT} port!`);
 httpServer.listen(HTTP_PORT);
 
-
+// TODO
+// refactor this shitcode as soon as possible
 import WebSocket, { WebSocketServer } from 'ws';
 import { TYPES } from './src/utils/consts.js';
 import shipsPoolConverter from './src/utils/shipspoolconverter.js'
-import backendMessageSender from "./src/utils/sender.js";
-import frontendMessageHandler from "./src/utils/handler.js";
 import attackTest from "./src/utils/attacktest.js";
 import isGameFinished from "./src/utils/finishtest.js";
+import isUserValid from "./src/utils/uservalidator.js";
+import regResponse from "./src/responses/reg.js";
+import updateRoom from "./src/responses/updateroom.js";
+import addUserToRoom from "./src/utils/addusertoroom.js";
+import createGame from "./src/responses/creategame.js";
+import attack from "./src/responses/attack.js";
+import turn from "./src/responses/turn.js";
+import finish from "./src/responses/finish.js";
+import updateWinners from "./src/responses/updwinners.js";
 
 const WS_PORT = 3000;
 
@@ -24,6 +32,7 @@ let i = 0;
 let usersDb = [];
 let roomDb = [];
 let gameDb = [];
+let winnersDb = [];
 let game = {};
 let currentPlayer;
 let currentGame;
@@ -32,97 +41,38 @@ let firstPlayerShips, secondPlayerShips;
 
 
 server.on('connection', (ws) => {
-  console.log(`user ${++i} connected`);
+  console.log(`user ${i} connected`);
   const userIndex = i;
   server.clients[i] = ws;
 
   ws.on('message', (message) => {
     let { type, data, id } = JSON.parse(message.toString());
-    let bckResponseData = '';
 
     if (type === TYPES.REG) {
-      const { name, password } = JSON.parse(data);
-      const index = userIndex;
-      const validator = (name.length >= 5 && password.length >= 5) ?
-        { error: false, errorText: '', } : { error: true, errorText: 'length of username or passord less then 5 symbols', };
+      const responseReg = regResponse(data, userIndex, usersDb);
+      ws.send(JSON.stringify(responseReg));
 
-      if (!validator.error) {
-        const newUser = { name, password, index };
-        usersDb.push(newUser);
-      }
-
-      bckResponseData = JSON.stringify(
-        {
-          name,
-          index,
-          error: validator.error,
-          errorText: validator.errorText,
-        }
-      );
-
-      const response = {
-        type,
-        data: bckResponseData,
-        id,
-      }
-
-      ws.send(JSON.stringify(response));
-
-      // console.log(roomDb.length);
+      // update rooms view for user
       if (roomDb.length > 0) {
-        bckResponseData = JSON.stringify(roomDb);
-
-        const response = {
-          type: TYPES.UPDATE_ROOM,
-          data: bckResponseData,
-          id,
-        }
-        // console.log('inside', response);
+        const responseUpdRoom = updateRoom(roomDb);
         server.clients.forEach(client => {
           if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(response));
+            client.send(JSON.stringify(responseUpdRoom));
           }
         })
       }
     }
 
     if (type === TYPES.CREATE_ROOM) {
+      addUserToRoom(userIndex, usersDb, roomDb);
 
-      /* roomDB = [ {
-          roomId: number,
-          roomUsers: [ {
-            name,
-            index
-          } ]
-        } ]
-      */
-      const validateUserInRoom = roomDb.find(room =>
-        room.roomUsers.find(user =>
-          user.index === userIndex));
-
-      // if current user has no room we should create new room with him
-      if (!validateUserInRoom) {
-        type = TYPES.UPDATE_ROOM;
-        const roomId = roomDb.length + 1;
-        const currentUserIndex = usersDb.findIndex((user) => user.index === userIndex);
-        const roomUsers = [{ name: usersDb[currentUserIndex].name, index: usersDb[currentUserIndex].index }];
-
-        roomDb.push({ roomId, roomUsers });
-      }
-
-      bckResponseData = JSON.stringify(roomDb);
-      const response = {
-        type,
-        data: bckResponseData,
-        id,
-      }
+      const response = updateRoom(roomDb);
 
       server.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify(response));
         }
       })
-
     }
 
     if (type === TYPES.ADD_USER_TO_ROOM) {
@@ -141,44 +91,37 @@ server.on('connection', (ws) => {
       if (userAlreadyInRoomDb) return;
 
       // otherwise add new user to currentRoom in rooms database
+      const newPlayerName = usersDb
+        .find(user => user.index === userIndex)
+        .name;
       roomDb[currentRoomIndex].roomUsers.push({
-        name: usersDb.find(user => user.index === userIndex).name,
+        name: newPlayerName,
         index: userIndex,
       })
       // create game for both
       const idGame = gameDb.length + 1;
+      let usersInGame = [];
 
       roomDb[currentRoomIndex].roomUsers.forEach((user) => {
-        const bckResponseData = JSON.stringify({
-          idGame,
-          idPlayer: user.index,
-        });
-        const response = {
-          type: TYPES.CREATE_GAME,
-          data: bckResponseData,
-          id: 0,
-        }
+        const response = createGame(user, idGame);
         if (server.clients[user.index].readyState === WebSocket.OPEN) {
           server.clients[user.index].send(JSON.stringify(response));
         }
+        usersInGame.push(user.index);
       })
 
-      // update rooms database deleting that room from base
-      roomDb.splice(currentRoomIndex, 1);
-      const bckResponseData = JSON.stringify(roomDb);
+      // update rooms database deleting rooms of both from base
+      usersInGame.forEach(userId => {
+        roomDb.splice(userId, 1);
+        console.log(`Room ${userId} removed from base`);
+      });
 
-      const response = {
-        type: TYPES.UPDATE_ROOM,
-        data: bckResponseData,
-        id: 0,
-      }
-
+      const responseUpdRoom = updateRoom(roomDb);
       server.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify(response));
+          client.send(JSON.stringify(responseUpdRoom));
         }
       })
-
     }
 
     if (type === TYPES.ADD_SHIPS) {
@@ -197,12 +140,8 @@ server.on('connection', (ws) => {
         firstPlayerShips = shipsPoolConverter(ships);
       }
 
-      // console.log('first player', firstPlayer, 'ships', Array.isArray(firstPlayerShips));
-      // console.log('second player', secondPlayer, 'ships', Array.isArray(secondPlayerShips));
-
       // ======== start game for both players
       if (game[gameId].length === 2) {
-        console.log(game, currentPlayer);
         game[gameId].forEach((gamer) => {
           const bckResponseData = JSON.stringify(gamer);
           const response = {
@@ -215,13 +154,8 @@ server.on('connection', (ws) => {
             server.clients[clientIndex].send(JSON.stringify(response));
             // ======== send TURN to player who set ships first
             if (clientIndex === currentPlayer) {
-              const bckResponseData = JSON.stringify({ currentPlayer });
-              const response = {
-                type: TYPES.TURN,
-                data: bckResponseData,
-                id: 0,
-              }
-              server.clients[currentPlayer].send(JSON.stringify(response));
+              const turnResponse = turn(currentPlayer);
+              server.clients[currentPlayer].send(JSON.stringify(turnResponse));
             }
           }
         })
@@ -233,73 +167,51 @@ server.on('connection', (ws) => {
       const { gameId, x, y, indexPlayer } = JSON.parse(data);
       if (!(indexPlayer === currentPlayer)) return;
 
-
-
-      // TODO
-      // check if shot or killed or missed
       const testedArray = (currentPlayer === firstPlayer) ?
         secondPlayerShips : firstPlayerShips;
-      // console.log(testedArray);
       const { status, array } = attackTest(x, y, testedArray);
-      console.log('player ', currentPlayer, status);
 
-
-      // send response ATTACK to second player
-      const bckResponseData = JSON.stringify({
-        position: { x, y },
-        currentPlayer,
-        status,
-      });
-      const response = {
-        type: TYPES.ATTACK,
-        data: bckResponseData,
-        id: 0,
-      }
-      server.clients[currentPlayer].send(JSON.stringify(response));
+      // send response ATTACK to player
+      const attackResponse = attack(currentPlayer, x, y, status);
+      server.clients[currentPlayer].send(JSON.stringify(attackResponse));
 
       // turn to another player
       if (status === 'missed') {
         currentPlayer = (currentPlayer === firstPlayer) ? secondPlayer : firstPlayer;
-        const bckResponseData = JSON.stringify({ currentPlayer });
-        const response = {
-          type: TYPES.TURN,
-          data: bckResponseData,
-          id: 0,
-        }
-        server.clients[currentPlayer].send(JSON.stringify(response));
+        const turnResponse = turn(currentPlayer);
+        server.clients[currentPlayer].send(JSON.stringify(turnResponse));
         return;
       }
 
       if (isGameFinished(array)) {
-        console.log('finished');
+        console.log(`Game finished with ${currentPlayer} wins`);
         // send finish game
-        let bckResponseData = JSON.stringify({ winPlayer: currentPlayer });
-        let response = {
-          type: TYPES.FINISH,
-          data: bckResponseData,
-          id: 0,
-        }
-        server.clients[currentPlayer].send(JSON.stringify(response));
+        game[currentGame] = [];
+        const finishResponse = finish(currentPlayer);
+        server.clients[currentPlayer].send(JSON.stringify(finishResponse));
 
         // updatewinner
-        bckResponseData = JSON.stringify({ winPlayer: currentPlayer });
-        response = {
-          type: TYPES.UPDATE_WINNERS,
-          data: bckResponseData,
-          id: 0,
+        console.log(winnersDb);
+        const winnerData = usersDb.find(user =>
+          user.index === currentPlayer);
+        const winnerWins = winnersDb.find(winner =>
+          winner.name === winnerData.name);
+        if (winnerWins) {
+          winnerWins.wins++;
+        } else {
+          const name = winnerData.name;
+          const wins = 1;
+          winnersDb.push({ name, wins });
         }
-        server.clients[currentPlayer].send(JSON.stringify(response));
+        const updWinnersResponse = updateWinners(currentPlayer);
+        server.clients[currentPlayer].send(JSON.stringify(updWinnersResponse));
         return;
       }
-
     }
-
-    // if (currentGame) game[currentGame].forEach(game => console.log(game.ships));
-    // console.log('Rooms DB', roomDb);
-
   })
+
   ws.on('close', () => {
-    console.log(`user ${i} leaved a game`);
+    console.log(`user ${userIndex} leaved a game`);
 
     // remove user's room if user close page
     const closedUserInRoom = roomDb.find(room =>
@@ -310,13 +222,7 @@ server.on('connection', (ws) => {
       const roomIndex = roomDb.indexOf(closedUserInRoom);
       roomDb.splice(roomIndex, 1);
 
-      const bckResponseData = JSON.stringify(roomDb);
-
-      const response = {
-        type: TYPES.UPDATE_ROOM,
-        data: bckResponseData,
-        id: 0,
-      }
+      const response = updateRoom(roomDb);
 
       server.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
@@ -325,8 +231,8 @@ server.on('connection', (ws) => {
       })
     }
 
-
-
   })
 
+  // increase websocket index
+  i++;
 })
